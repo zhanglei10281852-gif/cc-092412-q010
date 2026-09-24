@@ -215,6 +215,53 @@ CREATE TABLE IF NOT EXISTS background_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_ready ON background_jobs(status, available_at);
+
+CREATE TABLE IF NOT EXISTS import_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_key TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    content_hash TEXT NOT NULL,
+    file_name TEXT NOT NULL DEFAULT '',
+    params_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'staged' CHECK(status IN ('staged','confirmed','superseded')),
+    total_rows INTEGER NOT NULL DEFAULT 0,
+    submitted_by INTEGER NOT NULL REFERENCES users(id),
+    submitted_by_name TEXT NOT NULL,
+    submitted_at TEXT NOT NULL,
+    confirmed_by INTEGER REFERENCES users(id),
+    confirmed_by_name TEXT,
+    confirmed_at TEXT,
+    result_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(source_key, content_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_batches_status ON import_batches(status);
+
+CREATE TABLE IF NOT EXISTS import_rows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+    row_number INTEGER NOT NULL,
+    id_card TEXT,
+    payload_json TEXT NOT NULL,
+    normalized_json TEXT,
+    status TEXT NOT NULL CHECK(status IN ('valid','invalid','conflict','written','skipped')),
+    errors_json TEXT NOT NULL DEFAULT '[]',
+    existing_resident_id INTEGER,
+    decision TEXT CHECK(decision IN ('overwrite','skip')),
+    decided_by INTEGER REFERENCES users(id),
+    decided_by_name TEXT,
+    decided_at TEXT,
+    written_resident_id INTEGER,
+    write_action TEXT CHECK(write_action IN ('insert','update')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(batch_id, row_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_rows_batch ON import_rows(batch_id, status);
+CREATE INDEX IF NOT EXISTS idx_import_rows_id_card ON import_rows(id_card);
 '''
 
 PERMISSIONS = [
@@ -226,6 +273,8 @@ PERMISSIONS = [
     ("departments.write", "维护部门", "departments", "write"),
     ("residents.read", "查看居民", "residents", "read"),
     ("residents.write", "维护居民", "residents", "write"),
+    ("residents.import", "提交居民导入批次", "residents", "import"),
+    ("residents.import.confirm", "审核并确认居民导入", "residents", "import_confirm"),
     ("affairs.read", "查看事务", "affairs", "read"),
     ("affairs.write", "办理事务", "affairs", "write"),
     ("petitions.read", "查看信访", "petitions", "read"),

@@ -1,24 +1,27 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
-from app.database import get_connection
+from app.database import get_connection, transaction
 from app.models import ResidentCreate, ResidentUpdate
+from app.services.imports import ResidentImportService
 
 router = APIRouter(prefix="/residents", tags=["居民管理"])
 
 
 @router.post("", status_code=201)
 def create_resident(resident: ResidentCreate):
-    conn = get_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(
-            """INSERT INTO residents (name, id_card, gender, birth_date, phone, address, village, household_head)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (resident.name, resident.id_card, resident.gender.value, resident.birth_date,
-             resident.phone, resident.address, resident.village, resident.household_head)
-        )
-        conn.commit()
-        return {"id": cursor.lastrowid, "message": "居民信息录入成功"}
+        with transaction(immediate=True) as conn:
+            cursor = conn.execute(
+                """INSERT INTO residents (name, id_card, gender, birth_date, phone, address, village, household_head)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (resident.name, resident.id_card, resident.gender.value, resident.birth_date,
+                 resident.phone, resident.address, resident.village, resident.household_head)
+            )
+            resident_id = cursor.lastrowid
+            ResidentImportService(conn).refresh_conflicts_for_id_cards([resident.id_card])
+        return {"id": resident_id, "message": "居民信息录入成功"}
+    except HTTPException:
+        raise
     except Exception as e:
         if "UNIQUE" in str(e):
             raise HTTPException(status_code=409, detail="身份证号已存在")
@@ -102,10 +105,10 @@ def update_resident(resident_id: int, data: ResidentUpdate):
 
 @router.delete("/{resident_id}")
 def delete_resident(resident_id: int):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM residents WHERE id = ?", (resident_id,))
-    conn.commit()
-    if cursor.rowcount == 0:
-        raise HTTPException(status_code=404, detail="居民不存在")
+    with transaction(immediate=True) as conn:
+        row = conn.execute("SELECT id_card FROM residents WHERE id = ?", (resident_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="居民不存在")
+        conn.execute("DELETE FROM residents WHERE id = ?", (resident_id,))
+        ResidentImportService(conn).refresh_conflicts_for_id_cards([row["id_card"]])
     return {"message": "删除成功"}

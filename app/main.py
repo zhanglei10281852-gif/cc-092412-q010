@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api import audit, auth, departments_admin, maintenance, metrics, roles, system, users, workflow
+from app.api import audit, auth, departments_admin, imports, maintenance, metrics, roles, system, users, workflow
 from app.core.errors import DomainError
 from app.database import close_connection, init_db
 from app.routers import affairs, announcements, departments, petitions, residents
@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
     close_connection()
 
 
-app = FastAPI(title="乡镇政务协同服务", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="乡镇政务协同服务", version="2.1.0", lifespan=lifespan)
 
 
 @app.exception_handler(DomainError)
@@ -40,6 +40,7 @@ app.include_router(departments_admin.router)
 app.include_router(workflow.router)
 app.include_router(metrics.router)
 app.include_router(maintenance.router)
+app.include_router(imports.router)
 app.include_router(residents.router)
 app.include_router(affairs.router)
 app.include_router(announcements.router)
@@ -49,4 +50,4 @@ app.include_router(petitions.router)
 
 @app.get("/")
 def root() -> dict:
-    return {"service": "乡镇政务协同服务", "version": "2.0.0"}
+    return {"service": "乡镇政务协同服务", "version": "2.1.0"}
