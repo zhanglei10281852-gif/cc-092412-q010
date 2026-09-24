@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api import audit, auth, departments_admin, maintenance, metrics, roles, system, users, workflow
+from app.api import audit, auth, departments_admin, imports, maintenance, metrics, roles, system, users, workflow
 from app.core.errors import DomainError
 from app.database import close_connection, init_db
 from app.routers import affairs, announcements, departments, petitions, residents
@@ -40,6 +40,7 @@ app.include_router(departments_admin.router)
 app.include_router(workflow.router)
 app.include_router(metrics.router)
 app.include_router(maintenance.router)
+app.include_router(imports.router)
 app.include_router(residents.router)
 app.include_router(affairs.router)
 app.include_router(announcements.router)

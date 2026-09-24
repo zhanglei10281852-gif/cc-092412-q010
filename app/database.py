@@ -198,6 +198,62 @@ CREATE TABLE IF NOT EXISTS department_memberships (
     UNIQUE(user_id, department_id, starts_at)
 );
 
+CREATE TABLE IF NOT EXISTS import_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_key TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    content_hash TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    file_format TEXT NOT NULL CHECK(file_format IN ('csv','json')),
+    params_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending_review' CHECK(status IN ('pending_review','confirmed','superseded')),
+    total_rows INTEGER NOT NULL DEFAULT 0,
+    valid_rows INTEGER NOT NULL DEFAULT 0,
+    conflict_rows INTEGER NOT NULL DEFAULT 0,
+    error_rows INTEGER NOT NULL DEFAULT 0,
+    inserted_rows INTEGER NOT NULL DEFAULT 0,
+    updated_rows INTEGER NOT NULL DEFAULT 0,
+    skipped_rows INTEGER NOT NULL DEFAULT 0,
+    submitted_by INTEGER NOT NULL REFERENCES users(id),
+    submitted_by_name TEXT NOT NULL,
+    submitted_at TEXT NOT NULL,
+    confirmed_by INTEGER REFERENCES users(id),
+    confirmed_by_name TEXT,
+    confirmed_at TEXT,
+    rechecked_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(batch_key, version),
+    UNIQUE(batch_key, content_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_batches_status ON import_batches(status, id DESC);
+CREATE INDEX IF NOT EXISTS idx_import_batches_dedup ON import_batches(submitted_by, content_hash);
+
+CREATE TABLE IF NOT EXISTS import_rows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+    row_no INTEGER NOT NULL,
+    id_card TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    raw_json TEXT NOT NULL,
+    normalized_json TEXT,
+    status TEXT NOT NULL CHECK(status IN ('valid','conflict','error','written','skipped')),
+    errors_json TEXT NOT NULL DEFAULT '[]',
+    conflict_resident_id INTEGER REFERENCES residents(id),
+    existing_json TEXT,
+    resolution TEXT NOT NULL DEFAULT 'pending' CHECK(resolution IN ('pending','insert','update','skip')),
+    resolved_by INTEGER REFERENCES users(id),
+    resolved_by_name TEXT,
+    resolved_at TEXT,
+    written_resident_id INTEGER REFERENCES residents(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(batch_id, row_no)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_rows_batch ON import_rows(batch_id, status, row_no);
+
 CREATE TABLE IF NOT EXISTS background_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     job_type TEXT NOT NULL,
@@ -226,6 +282,9 @@ PERMISSIONS = [
     ("departments.write", "维护部门", "departments", "write"),
     ("residents.read", "查看居民", "residents", "read"),
     ("residents.write", "维护居民", "residents", "write"),
+    ("imports.read", "查看居民导入", "imports", "read"),
+    ("imports.write", "提交与维护居民导入", "imports", "write"),
+    ("imports.confirm", "确认居民导入入库", "imports", "confirm"),
     ("affairs.read", "查看事务", "affairs", "read"),
     ("affairs.write", "办理事务", "affairs", "write"),
     ("petitions.read", "查看信访", "petitions", "read"),
